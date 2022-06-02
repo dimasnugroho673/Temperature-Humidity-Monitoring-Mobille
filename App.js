@@ -6,6 +6,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 
 import {
+  Alert,
   SafeAreaView,
   StyleSheet,
   Text,
@@ -19,23 +20,7 @@ import {
 
 import axios from 'axios';
 
-// const Stack = createStackNavigator();
-
-// function App() {
-//   console.log("entering..")
-//   return (
-//     <NavigationContainer>
-//       <Stack.Navigator
-//         initialRouteName="SplashScreen"
-//         screenOptions={{headerShown: false}}>
-//           <Stack.Screen name="Home" component={Home} />
-//           <Stack.Screen name="SplashScreen" component={SplashScreen} />
-//         </Stack.Navigator>
-//     </NavigationContainer>
-//   );
-// }
-
-const API = 'http://aman-server.temperature-monitoring.xyz/api';
+const API = 'https://aman-server.temperature-monitoring.xyz/api';
 
 class App extends Component {
   constructor(props) {
@@ -44,11 +29,12 @@ class App extends Component {
       data: [],
       isLoading: true,
       isError: false,
+      errorMessage: null,
 
       idToken: null,
       isUserExist: false,
-      emailInput: null,
-      nameInput: null,
+      emailInput: "",
+      nameInput: "",
       isSubmit: null,
 
       dataProfile: [],
@@ -208,27 +194,45 @@ class App extends Component {
 
   }
 
-  submitEmail = () => {
+  forceLogin = () => {
 
-    this.setState({ isSubmit: 1, isUserExist: true, });
+    alert("Memaksa masuk akan mengakibatkan aplikasi tidak dapat menerima notifikasi")
 
-    AsyncStorage.setItem('name', this.state.nameInput);
-    
+    AsyncStorage.setItem('name', 'Guest');
+
     AsyncStorage.setItem('isUserExist', 'true');
 
-    let deviceInfo = [];
+    this.setState({ isSubmit: 1, isUserExist: true, isLoading: false, isError: false, errorMessage: null });
+  }
 
-    let data = new FormData();
-    data.append('name', this.state.nameInput);
-    data.append('email', this.state.emailInput);
-    data.append('token', this.state.idToken);
+  submitEmail = () => {
 
-    let url = `${API}/device`;
+    if (this.state.nameInput == null || this.state.nameInput == '' || this.state.emailInput == null || this.state.emailInput == '') {
+      alert('Semua field harus diisi')
+    } else {
+      this.setState({ isSubmit: 1, isUserExist: true });
 
-    axios.post(url, data)
-    .then((data) => console.log(data))
-    .catch((response) => console.log(response));
-
+      // PROSES PENYIMPNAN NAMA PADA DEVICE
+      AsyncStorage.setItem('name', this.state.nameInput);
+      
+      // PROSES PENYIMPNAN VARIABLE UNTUK PENGECEKAN APAKAH USER SUDAH LOGIN?
+      AsyncStorage.setItem('isUserExist', 'true');
+  
+      let deviceInfo = [];
+  
+      // PROSES PENGIRIMAN DATA LOGIN KE SERVER
+      let data = new FormData();
+      data.append('name', this.state.nameInput);
+      data.append('email', this.state.emailInput);
+      data.append('token', this.state.idToken);
+  
+      let url = `${API}/device`;
+  
+      axios.post(url, data)
+      .then((data) => console.log(data))
+      .catch((response) =>  this.setState({isLoading: false, isError: true, errorMessage: "Kesalahan saat set account"}));
+  
+    }
 
   }
 
@@ -247,8 +251,8 @@ class App extends Component {
           }
         });
 
-        AsyncStorage.setItem('maxLimitTemperature', response.data.maxLimitTemperature);
-        AsyncStorage.setItem('maxLimitHumidity', response.data.maxLimitHumidity);
+        AsyncStorage.setItem('maxLimitTemperature', String(response.data.maxLimitTemperature));
+        AsyncStorage.setItem('maxLimitHumidity', String(response.data.maxLimitHumidity));
       })
 
     } catch (error) {
@@ -266,22 +270,26 @@ class App extends Component {
     );
   }
 
+  // PROSES REQUST DATA DARI ANDROID KE SERVER UNTUK MEMINTA DATA SUHU DAN KELEMBABAN
   getTemperatureData = async () => {
     try {
+
+      // PROSES REQUEST DATA
       const response = await axios.get(
-        // 'https://temperature-monitoring-230321.herokuapp.com/api/temperature/latest',
         `${API}/temperature/latest`,
       );
 
       let temperatureCondition;
       let humidityCondition;
 
+      // PENGECAKAN APAKAH SUHU NORMAL ATAU TIDAK
       if (response.data.data.temperature < this.state.dataConfig.maxLimitTemperature) {
           temperatureCondition = 'Normal';
       } else if (response.data.data.temperature >= this.state.dataConfig.maxLimitTemperature) {
           temperatureCondition = 'Tidak normal';
       }
 
+      // PENGECAKAN APAKAH KELEMBABAN NORMAL ATAU TIDAK
       if (response.data.data.humidity < this.state.dataConfig.maxLimitHumidity) {
           humidityCondition = 'Normal';
       } else if (response.data.data.humidity >= this.state.dataConfig.maxLimitHumidity) {
@@ -292,6 +300,7 @@ class App extends Component {
       this.setState({
         isError: false,
         isLoading: false,
+        errorMessage: null,
         data: response.data.data,
         dataTemperature: {
           temperature: response.data.data.temperature,
@@ -303,7 +312,7 @@ class App extends Component {
         },
       });
     } catch (error) {
-      this.setState({isLoading: false, isError: true});
+      this.setState({isLoading: false, isError: true, errorMessage: "Kesalahan saat get data suhu"});
     }
   };
 
@@ -326,7 +335,13 @@ class App extends Component {
       } else if (this.state.isError) {
         return (
           <View style={{alignItems: 'center', justifyContent: 'center', flex: 1}}>
-            <Text>Terjadi Error Saat Memuat Data</Text>
+            <Text>Terjadi kesalahan saat memuat data</Text>
+
+            <TouchableOpacity onPress={this.forceLogin} style={{ backgroundColor: '#DC3545', padding: 10, borderRadius: 10, alignItems: 'center'}}>
+                <Text style={{color: 'white', fontWeight: 'bold', textTransform: 'uppercase' }}>Paksa masuk</Text>
+              </TouchableOpacity>
+
+            <Text>{JSON.stringify(this.state.errorMessage)}</Text>
           </View>
         );
       }
@@ -346,7 +361,7 @@ class App extends Component {
               </View>
             </View>
 
-
+            {/* ---START--- PENGECEKAN APAKAH SUHU NORMAL UNTUK BAGIAN TAMPILAN */}
             <View style={{ marginTop: 40, padding: 10}}>
               <Text style={{ color: '#8D8D8D', fontSize: 14, marginBottom: 12, fontWeight: 'bold' }}>Perangkat</Text>
 
@@ -422,6 +437,8 @@ class App extends Component {
                   }
                   
                 </View>
+
+                {/* ---END--- PENGECEKAN APAKAH SUHU NORMAL UNTUK BAGIAN TAMPILAN */}
                 
                 
               </View>
@@ -444,6 +461,8 @@ class App extends Component {
       );
 
     } else {
+
+      // BAGIAN TAMPILAN UNTUK DAFTAR AKUN DEVICE
       return (
           <View style={{ padding: 20, alignItems: 'center', justifyContent: 'center', flex: 1, fontFamily: 'Poppins-Regular', backgroundColor: '#F5F5F5'}}>
             <View>
